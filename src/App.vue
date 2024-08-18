@@ -22,7 +22,7 @@
               </div>
               <div class="p-field">
                 <label for="deadline">Deadline</label>
-                <Calendar id="deadline" v-model="newCampaign.deadline" dateFormat="yy-mm-dd" required />
+                <DatePicker v-model="newCampaign.deadline" dateFormat="yy-mm-dd" />
               </div>
               <Button type="submit" label="Create Campaign" />
             </div>
@@ -56,7 +56,7 @@ import axios from 'axios';
 import { useToast } from "primevue/usetoast";
 import Card from 'primevue/card';
 import InputNumber from 'primevue/inputnumber';
-import Calendar from 'primevue/calendar';
+import DatePicker from 'primevue/datepicker';
 import Button from 'primevue/button';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
@@ -68,7 +68,7 @@ export default {
   components: {
     Card,
     InputNumber,
-    Calendar,
+    DatePicker,
     Button,
     DataTable,
     Column,
@@ -155,7 +155,7 @@ export default {
           deadline: this.newCampaign.deadline,
           creatorPublicKey: this.userAccount.publicKey
         });
-        
+        console.log('respone', response.data);
         const { transactionXDR, campaignId } = response.data;
         
         // Sign the transaction

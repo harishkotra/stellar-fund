@@ -43,12 +43,13 @@ class CrowdfundingCampaign {
   constructor(creator, goal, deadline, creatorPublicKey) {
     this.creator = creator || 'Anonymous'; // Default to 'Anonymous' if no creator is provided
     this.goal = goal;
-    this.deadline = deadline;
+    this.deadline = deadline instanceof Date ? deadline : new Date(deadline);
     this.raised = 0;
     this.contributions = {};
     this.id = Date.now().toString();
     this.stellarAddress = ''; // Will be set when createCampaign is called
     this.creatorPublicKey = creatorPublicKey;
+    this.transactionXDR = null;
   }
 
   // async createCampaign() {
@@ -184,19 +185,68 @@ const campaigns = [];
 
 // Load campaigns from Firebase
 async function loadCampaigns() {
-  const snapshot = await database.ref('campaigns').once('value');
-  return snapshot.val() || {};
+  try {
+    const snapshot = await admin.database().ref('campaigns').once('value');
+    const campaigns = snapshot.val() || {};
+    
+    // Convert deadline strings back to Date objects
+    Object.entries(campaigns).forEach(([id, campaign]) => {
+      if (campaign.deadline) {
+        campaign.deadline = new Date(campaign.deadline);
+      }
+
+      if (!campaign.contributions) {
+        campaign.contributions = {};
+      }
+
+      // Remove any undefined values
+      Object.keys(campaign).forEach(key => {
+        if (campaign[key] === undefined) {
+          delete campaign[key];
+        }
+      });
+
+    });
+    
+    return campaigns;
+  } catch (error) {
+    console.error('Error loading campaigns from Firebase:', error);
+    return {};
+  }
 }
 
 // Save campaign to Firebase
 async function saveCampaign(campaign) {
-  const campaignData = campaign.toJSON();
-  for (let key in campaignData) {
-    if (campaignData[key] === undefined) {
-      campaignData[key] = null;
-    }
+  try {
+    // Create a clean object without undefined values
+    const cleanCampaign = Object.entries(campaign).reduce((acc, [key, value]) => {
+      if (value !== undefined) {
+        if (key === 'deadline' && value instanceof Date) {
+          acc[key] = value.toISOString();
+        } else if (key === 'contributions' && typeof value === 'object') {
+          // Handle contributions object
+          acc[key] = Object.entries(value).reduce((contAcc, [contKey, contValue]) => {
+            if (contValue !== undefined) {
+              contAcc[contKey] = contValue;
+            }
+            return contAcc;
+          }, {});
+        } else {
+          acc[key] = value;
+        }
+      }
+      return acc;
+    }, {});
+
+    console.log('Clean campaign data to save:', cleanCampaign);
+
+    await admin.database().ref('campaigns/' + campaign.id).set(cleanCampaign);
+
+    return 'Campaign saved successfully';
+  } catch (error) {
+    console.error('Error saving campaign:', error);
+    throw error;
   }
-  await database.ref('campaigns/' + campaign.id).set(campaignData);
 }
 
 app.post('/create-account', async (req, res) => {
@@ -216,16 +266,17 @@ app.post('/create-account', async (req, res) => {
 
 app.post('/campaigns', async (req, res) => {
   const { creator, goal, deadline, creatorPublicKey } = req.body;
-  if (!goal || !deadline || !creatorPublicKey) {
-    return res.status(400).json({ message: 'Goal, deadline, and creator public key are required' });
-  }
-  const campaign = new CrowdfundingCampaign(creator, goal, new Date(deadline), creatorPublicKey);
   try {
-    const transactionXDR = await campaign.createCampaign();
+    const campaign = new CrowdfundingCampaign(creator, goal, new Date(deadline), creatorPublicKey);
+    const transactionXDRData = await campaign.createCampaign();
+    
+    // Save the campaign to Firebase immediately after creation
+    await saveCampaign(campaign);
+
     res.status(201).json({ 
       message: 'Campaign creation prepared', 
       campaignId: campaign.id,
-      transactionXDR 
+      transactionXDR: transactionXDRData
     });
   } catch (error) {
     console.error('Error creating campaign:', error);
@@ -292,15 +343,45 @@ app.post('/campaigns/:id/finalize', async (req, res) => {
       return res.status(404).json({ message: 'Campaign not found' });
     }
 
-    const transaction = StellarSdk.TransactionBuilder.fromXDR(
-      signedTransactionXDR,
-      StellarSdk.Networks.TESTNET
-    );
-    const result = await server.submitTransaction(transaction);
-    campaign.stellarAddress = result.operation_results[0].created_account;
-    await saveCampaign(campaign);
+    if (!signedTransactionXDR) {
+      return res.status(400).json({ message: 'signedTransactionXDR is required' });
+    }
 
-    res.json({ message: 'Campaign finalized', stellarAddress: campaign.stellarAddress });
+    let transaction;
+    try {
+      transaction = StellarSdk.TransactionBuilder.fromXDR(
+        signedTransactionXDR,
+        StellarSdk.Networks.TESTNET
+      );
+    } catch (error) {
+      return res.status(400).json({ message: 'Invalid transaction XDR', error: error.message });
+    }
+
+    try {
+      const transactionResult = await server.submitTransaction(transaction);
+      
+      //console.log(JSON.stringify(transactionResult, null, 2));
+      //console.log('\nSuccess! View the transaction at: ');
+      //console.log(transactionResult._links.transaction.href);      
+      console.log('Campaign object before saving:', campaign);
+      console.log('Campaign object keys:', Object.keys(campaign));
+      
+      const saveResult = await saveCampaign(campaign);
+      console.log(saveResult);
+
+      res.json({ 
+        message: 'Campaign finalized', 
+        stellarAddress: campaign.stellarAddress,
+        transactionId: transactionResult.id
+      });
+    } catch (error) {
+      console.error('Error details:', error);
+      return res.status(500).json({ 
+        message: 'Failed to submit transaction', 
+        error: error.message,
+        extras: error.response?.data?.extras
+      });
+    }
   } catch (error) {
     res.status(500).json({ message: 'Failed to finalize campaign', error: error.message });
   }
