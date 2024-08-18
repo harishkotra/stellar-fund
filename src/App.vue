@@ -10,7 +10,7 @@
           <TabPanel header="About">
             <div class="about-section">
               <h2>Decentralized Crowdfunding on Stellar</h2>
-              <p>StellarFund is a revolutionary platform that leverages the power of the Stellar blockchain to enable secure and transparent crowdfunding campaigns.</p>
+              <p>StellarFund is a platform that leverages the power of the Stellar blockchain to enable secure and transparent crowdfunding campaigns.</p>
               
               <h3>Key Features:</h3>
               <ul>
@@ -23,55 +23,82 @@
           </TabPanel>
           
           <TabPanel header="Campaigns">
-            <div v-if="!userAccount && !isCreatingAccount">
+            <div v-if="!userAccount">
               <h2>Create Stellar Test Account</h2>
-              <Button label="Create Test Account" @click="createAccount" :disabled="isCreatingAccount" />
+              <p>For testing the functionality, create a new testnet account along with a secret key that will be used to create campaigns where a goal can be set and funds can be raised/contributed to.</p>
+              <Button label="Create Test Account" @click="createAccount"
+              :loading="isCreatingAccount"
+              loadingIcon="pi pi-spinner pi-spin"
+              :disabled="isCreatingAccount" />
             </div>
             <div v-else-if="isCreatingAccount" class="account-creation-animation">
               <ProgressSpinner />
               <p>Creating your Stellar test account...</p>
             </div>
             <div v-else>
-              <p>Your Public Key: {{ userAccount.publicKey }}</p>
-              <p>Your Secret Key: {{ maskedSecretKey }}</p>
+              <h2>Your Stellar Test Account</h2>
+
+              <Fieldset>
+                  <template #legend>
+                      <div class="flex items-center gap-2 px-2">
+                          <Avatar :image="userAccount.imageUrl" shape="circle" />
+                          <span class="font-bold">{{ userAccount.name }} (Dummy Name)</span>
+                      </div>
+                  </template>
+                  <div class="flex flex-col gap-2">
+                    <label for="publicKey">Public Key</label>
+                    <InputGroup>
+                      <InputText id="publicKey" v-model="userAccount.publicKey" readonly disabled v-tooltip.top="'This is the testnet accont public key and not an actual account key.'" />
+                      <Button icon="pi pi-copy" @click="copyToClipboard(userAccount.publicKey)" />
+                    </InputGroup>
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <label for="secretKey">Secret Key</label>
+                    <InputGroup>
+                      <InputText id="secretKey" v-model="maskedSecretKey" readonly disabled v-tooltip.top="'This is the testnet accont secret key and not an actual account key.'" />
+                      <Button icon="pi pi-copy" @click="copyToClipboard(userAccount.secretKey)" />
+                    </InputGroup>
+                  </div>
+              </Fieldset>
+
               <h2>Create New Campaign</h2>
               <form @submit.prevent="createCampaign">
                 <div class="p-fluid">
-                  <div class="p-field">
+                  <div class="flex flex-col gap-2">
                     <label for="goal">Goal Amount (XLM)</label>
-                    <InputNumber id="goal" v-model="newCampaign.goal" required />
+                    <InputNumber id="goal" v-model="newCampaign.goal" required :min="0.01" />
                   </div>
-                  <div class="p-field">
+                  <div class="flex flex-col gap-2">
                     <label for="deadline">Deadline</label>
-                    <DatePicker v-model="newCampaign.deadline" dateFormat="yy-mm-dd" />
+                    <DatePicker v-model="newCampaign.deadline" dateFormat="yy-mm-dd" :minDate="new Date()" />
                   </div>
-                  <Button type="submit" :label="isCreatingCampaign ? '' : 'Create Campaign'" :disabled="isCreatingCampaign">
-                  <template #icon>
-                    <i :class="{'pi pi-spin pi-spinner': isCreatingCampaign}" />
-                  </template>
-                  <span v-if="!isCreatingCampaign">Create Campaign</span>
-                </Button>
+                  <Button type="submit" :disabled="isCreatingCampaign || !isFormValid">
+                    <span v-if="isCreatingCampaign" class="spinner"></span>
+                    <span v-else>Create Campaign</span>
+                  </Button>
                 </div>
               </form>
             </div>
 
-            <h2>Active Campaigns</h2>
-            <DataTable :value="campaigns">
-              <Column field="id" header="ID"></Column>
-              <Column field="goal" header="Goal (XLM)"></Column>
-              <Column field="raised" header="Raised (XLM)"></Column>
-              <Column field="deadline" header="Deadline">
-                <template #body="slotProps">
-                  {{ new Date(slotProps.data.deadline).toLocaleDateString() }}
-                </template>
-              </Column>
-              <Column header="Contribute">
-                <template #body="slotProps">
-                  <InputNumber v-model="slotProps.data.contributionAmount" placeholder="Amount" />
-                  <Button label="Contribute" @click="contribute(slotProps.data.id, slotProps.data.contributionAmount)" />
-                </template>
-              </Column>
-            </DataTable>
+            <div v-if="campaigns.length > 0">
+              <h2>Active Campaigns</h2>
+              <DataTable :value="campaigns">
+                <Column field="id" header="ID"></Column>
+                <Column field="goal" header="Goal (XLM)"></Column>
+                <Column field="raised" header="Raised (XLM)"></Column>
+                <Column field="deadline" header="Deadline">
+                  <template #body="slotProps">
+                    {{ new Date(slotProps.data.deadline).toLocaleDateString() }}
+                  </template>
+                </Column>
+                <Column header="Contribute">
+                  <template #body="slotProps">
+                    <InputNumber v-model="slotProps.data.contributionAmount" placeholder="Amount" />
+                    <Button label="Contribute" @click="contribute(slotProps.data.id, slotProps.data.contributionAmount)" />
+                  </template>
+                </Column>
+              </DataTable>
+            </div>
           </TabPanel>
         </TabView>
       </template>
@@ -92,6 +119,9 @@ import Toast from 'primevue/toast';
 import TabView from 'primevue/tabview';
 import TabPanel from 'primevue/tabpanel';
 import ProgressSpinner from 'primevue/progressspinner';
+import InputGroup from 'primevue/inputgroup';
+import InputText from 'primevue/inputtext';
+import Fieldset from 'primevue/fieldset';
 import { Keypair, Networks, Transaction } from 'stellar-sdk';
 
 export default {
@@ -106,7 +136,10 @@ export default {
     Toast,
     TabView,
     TabPanel,
-    ProgressSpinner
+    ProgressSpinner,
+    InputGroup,
+    InputText,
+    Fieldset
   },
   setup() {
     const toast = useToast();
@@ -130,6 +163,7 @@ export default {
     this.startPolling();
     this.loadUserAccount();
     this.validateUserAccount();
+    console.log(this.userAccount);
   },
   beforeUnmount() {
     this.stopPolling();
@@ -146,6 +180,24 @@ export default {
     }
   },
   methods: {
+    async getRandomUser() {
+      try {
+        const response = await axios.get('https://randomuser.me/api/');
+        const user = response.data.results[0];
+        return {
+          name: `${user.name.first} ${user.name.last}`,
+          imageUrl: user.picture.medium,
+          email: user.email
+        };
+      } catch (error) {
+        console.error('Error fetching random user:', error);
+        return {
+          name: 'Anonymous User',
+          imageUrl: 'https://via.placeholder.com/150',
+          email: 'anonymous@example.com'
+        };
+      }
+    },
     async loadUserAccount() {
       const storedAccount = localStorage.getItem('userAccount');
       if (storedAccount) {
@@ -171,8 +223,14 @@ export default {
     async createAccount() {
       this.isCreatingAccount = true;
       try {
-        const response = await axios.post('http://localhost:3000/create-account');
-        this.userAccount = response.data;
+        const stellarResponse = await axios.post('http://localhost:3000/create-account');
+        // Get random user data
+        const randomUser = await this.getRandomUser();
+
+        this.userAccount = {
+          ...stellarResponse.data,
+          ...randomUser
+        };
         localStorage.setItem('userAccount', JSON.stringify(this.userAccount));
         this.showSuccess('Stellar test account created successfully');
       } catch (error) {
@@ -275,7 +333,15 @@ export default {
     },
     showError(message) {
       this.toast.add({severity:'error', summary: 'Error', detail: message, life: 3000});
-    }
+    },
+    copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        this.showSuccess('Copied to clipboard');
+      }, (err) => {
+        console.error('Could not copy text: ', err);
+        this.showError('Failed to copy to clipboard');
+      });
+    },
   }
 }
 </script>
@@ -293,10 +359,6 @@ export default {
 .p-card {
   margin: 0 auto;
   max-width: 800px;
-}
-
-.p-field {
-  margin-bottom: 1rem;
 }
 
 .about-section {

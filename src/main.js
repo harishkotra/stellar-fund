@@ -4,7 +4,7 @@ import ToastService from 'primevue/toastservice'
 import Aura from '@primevue/themes/aura';
 import App from './App.vue'
 // import * as StellarSdk from 'stellar-sdk';
-
+import '@/assets/styles.scss';
 // const server = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
 
 const app = createApp(App)
