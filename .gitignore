@@ -2,7 +2,7 @@
 node_modules
 /dist
 
-
+stellar-fund-firebase-adminsdk-u8q2x-f39fcd9bfe.json
 # local env files
 .env.local
 .env.*.local

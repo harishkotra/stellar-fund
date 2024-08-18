@@ -1,87 +1,144 @@
 const express = require('express');
-const StellarSdk = require('stellar-sdk');
+//const fs = require('fs').promises;
+//const path = require('path');
 const cors = require('cors');
+const StellarSdk = require('stellar-sdk');
+require('dotenv').config();
+const admin = require('firebase-admin');
+//require('firebase/database');
 
 const app = express();
 const port = 3000;
+//const dataFile = path.join(__dirname, 'campaigns.json');
 
 app.use(express.json());
 app.use(cors());
 
-// Update this line
+// const firebaseConfig = {
+//   apiKey: `${process.env.FB_API_KEY}`,
+//   authDomain: `${process.env.FB_AUTH_DOMAIN}`,
+//   projectId: `${process.env.FB_PROJECT_ID}`,
+//   storageBucket: `${process.env.FB_STORAGE_BUCKET}`,
+//   messagingSenderId: `${process.env.FB_MESSAGE_SENDER_ID}`,
+//   appId: `${process.env.FB_APP_ID}`,
+//   measurementId: `${process.env.FB_MEASUREMENT_ID}`,
+// };
+
+// Initialize Firebase Admin
+const serviceAccount = require(`${process.env.FB_SERVICEACC_PATH}`);
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: `${process.env.FB_REALTIME_DB_URL}`
+});
+
+const database = admin.database();
+
 const server = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
-const campaignCreator = 'GAA4E52UMSP45OE54HCG3KYNDL3LCMUCRS2NE3F3XWGGC7B7PQUJ2TQK';
-//secret = SAJ5KMOXHHD4VHRWXLWY3NTEG5K5BCULNQ7PKSUIB66JPCQICJJUNNY6
-const contributor1 = 'GDJYQND2RUIA6BI5MQNERT7NRKUUJHCFQE3XIA4BNM2VHAGPFX4VRUTK'; 
-//secret = SAABUEDXXK5HJXEWGY36WNMB6VOBQU3SCTOJYKTKK7HWDTU5QUKRBTM4
-const contributor2 = 'GC5JDZFD7CZC3B4DQHNKJGTN7M2J4DIVNXAUWB4SCY34TDFJM5POAQ45';
-//secret = SAAVN5CWI3PVW4KFLF55NBHUXB7RYV76RFMKZYVYZJPK6JAGAQ2662I7
+// const testnetAccount = `${process.env.TEST_ACCOUNT}`;
+// const testnetSecretKey = `${process.env.TEST_ACCOUNT_SECRET}`;
+// const contributor1 = `${process.env.CONTRIBUTOR_1}`;
+// const contributor2 = `${process.env.CONTRIBUTOR_2}`;
 
 class CrowdfundingCampaign {
-  constructor(creator, goal, deadline) {
-    this.creator = creator;
+  constructor(creator, goal, deadline, creatorPublicKey) {
+    this.creator = creator || 'Anonymous'; // Default to 'Anonymous' if no creator is provided
     this.goal = goal;
     this.deadline = deadline;
     this.raised = 0;
     this.contributions = {};
+    this.id = Date.now().toString();
+    this.stellarAddress = ''; // Will be set when createCampaign is called
+    this.creatorPublicKey = creatorPublicKey;
   }
+
+  // async createCampaign() {
+  //   // Create a Stellar account for the campaign
+  //   const campaignKeypair = StellarSdk.Keypair.random();
+    
+  //   const transaction = new StellarSdk.TransactionBuilder(
+  //     await server.loadAccount(testnetAccount),
+  //     { fee: StellarSdk.BASE_FEE, networkPassphrase: StellarSdk.Networks.TESTNET }
+  //   )
+  //     .addOperation(StellarSdk.Operation.createAccount({
+  //       destination: campaignKeypair.publicKey(),
+  //       startingBalance: '1' // Minimum balance to create an account
+  //     }))
+  //     .setTimeout(30)
+  //     .build();
+
+  //   transaction.sign(StellarSdk.Keypair.fromSecret(testnetSecretKey));
+  //   await server.submitTransaction(transaction);
+  //   this.stellarAddress = campaignKeypair.publicKey();
+  //   console.log('Campaign created with Stellar address:', this.stellarAddress);
+  // }
 
   async createCampaign() {
-    // Implementation omitted for brevity
-    console.log('Campaign created');
+    // Create a Stellar account for the campaign
+    const campaignKeypair = StellarSdk.Keypair.random();
+    
+    const transaction = new StellarSdk.TransactionBuilder(
+      await server.loadAccount(this.creatorPublicKey),
+      { fee: StellarSdk.BASE_FEE, networkPassphrase: StellarSdk.Networks.TESTNET }
+    )
+      .addOperation(StellarSdk.Operation.createAccount({
+        destination: campaignKeypair.publicKey(),
+        startingBalance: '1' // Minimum balance to create an account
+      }))
+      .setTimeout(30)
+      .build();
+
+    // The transaction needs to be signed by the creator
+    // We'll return the transaction XDR for the frontend to sign
+    return transaction.toXDR();
   }
 
-  async contribute(contributor, amount) {
-    // Implementation omitted for brevity
-    this.contributions[contributor] = (this.contributions[contributor] || 0) + parseFloat(amount);
-    this.raised += parseFloat(amount);
-    console.log(`Contribution of ${amount} XLM received from ${contributor}`);
-  }
+  // async contribute(contributor, amount) {
+  //   const transaction = new StellarSdk.TransactionBuilder(
+  //     await server.loadAccount(testnetAccount),
+  //     { fee: StellarSdk.BASE_FEE, networkPassphrase: StellarSdk.Networks.TESTNET }
+  //   )
+  //     .addOperation(StellarSdk.Operation.payment({
+  //       destination: this.stellarAddress,
+  //       asset: StellarSdk.Asset.native(),
+  //       amount: amount.toString()
+  //     }))
+  //     .setTimeout(30)
+  //     .build();
 
+  //   transaction.sign(StellarSdk.Keypair.fromSecret(testnetSecretKey));
+  //   await server.submitTransaction(transaction);
+
+  //   this.contributions[contributor] = (this.contributions[contributor] || 0) + parseFloat(amount);
+  //   this.raised += parseFloat(amount);
+  //   console.log(`Contribution of ${amount} XLM received from ${contributor}`);
+  // }
+
+  async contribute(contributorPublicKey, amount) {
+    const transaction = new StellarSdk.TransactionBuilder(
+      await server.loadAccount(contributorPublicKey),
+      { fee: StellarSdk.BASE_FEE, networkPassphrase: StellarSdk.Networks.TESTNET }
+    )
+      .addOperation(StellarSdk.Operation.payment({
+        destination: this.stellarAddress,
+        asset: StellarSdk.Asset.native(),
+        amount: amount.toString()
+      }))
+      .setTimeout(30)
+      .build();
+
+    // Return the transaction XDR for the frontend to sign
+    return transaction.toXDR();
+  }
+  
   async finalizeCampaign() {
-    // Implementation omitted for brevity
+    // Implementation for finalizing the campaign
     console.log('Campaign finalized');
   }
 
-  async makePayment(sourcePublicKey, destinationId, amount) {
-    // Configure StellarSdk to use the testnet
-    StellarSdk.Network.useTestNetwork();
-    const server = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
-
+  async getAccountDetails() {
     try {
-      // Fetch the source account
-      const sourceAccount = await server.loadAccount(sourcePublicKey);
-
-      // Create a payment transaction
-      const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-        fee: StellarSdk.BASE_FEE,
-        networkPassphrase: StellarSdk.Networks.TESTNET
-      })
-        .addOperation(StellarSdk.Operation.payment({
-          destination: destinationId,
-          asset: StellarSdk.Asset.native(),
-          amount: amount.toString()
-        }))
-        .setTimeout(30)
-        .build();
-
-      // Here, you would typically sign the transaction with the source account's secret key
-      // For security reasons, we're not doing that in this example
-      // transaction.sign(StellarSdk.Keypair.fromSecret(sourceSecretKey));
-
-      // Submit the transaction to the Stellar network
-      const transactionResult = await server.submitTransaction(transaction);
-      console.log(`Transaction Successful! Hash: ${transactionResult.hash}`);
-    } catch (error) {
-      console.error('An error has occurred:', error);
-      throw error;
-    }
-  }
-
-  async getAccountDetails(publicKey) {
-    try {
-      const account = await server.loadAccount(publicKey);
-      console.log('Balances for account: ' + publicKey);
+      const account = await server.loadAccount(this.stellarAddress);
+      console.log('Balances for campaign account:', this.stellarAddress);
       account.balances.forEach((balance) => {
         console.log('Type:', balance.asset_type, ', Balance:', balance.balance);
       });
@@ -90,15 +147,15 @@ class CrowdfundingCampaign {
     }
   }
 
-  async getRecentTransactions(publicKey) {
+  async getRecentTransactions() {
     try {
       const transactions = await server.transactions()
-        .forAccount(publicKey)
+        .forAccount(this.stellarAddress)
         .order('desc')
         .limit(10)
         .call();
       
-      console.log('Recent transactions for account: ' + publicKey);
+      console.log('Recent transactions for campaign account:', this.stellarAddress);
       transactions.records.forEach((tx) => {
         console.log('Transaction ID:', tx.id);
         console.log('Created at:', tx.created_at);
@@ -108,39 +165,145 @@ class CrowdfundingCampaign {
       console.error('Error fetching recent transactions:', error);
     }
   }
-  // Usage
-  //getRecentTransactions(campaignCreator);
+  
+  toJSON() {
+    return {
+      id: this.id,
+      creator: this.creator,
+      goal: this.goal,
+      deadline: this.deadline,
+      raised: this.raised,
+      contributions: this.contributions,
+      creatorPublicKey: this.creatorPublicKey,
+      stellarAddress: this.stellarAddress
+    };
+  }
 }
 
 const campaigns = [];
 
-app.post('/campaigns', async (req, res) => {
-  const { creator, goal, deadline } = req.body;
-  const campaign = new CrowdfundingCampaign(creator, goal, new Date(deadline));
-  await campaign.createCampaign();
-  campaigns.push(campaign);
-  res.status(201).json({ message: 'Campaign created successfully', campaignId: campaigns.length - 1 });
+// Load campaigns from Firebase
+async function loadCampaigns() {
+  const snapshot = await database.ref('campaigns').once('value');
+  return snapshot.val() || {};
+}
+
+// Save campaign to Firebase
+async function saveCampaign(campaign) {
+  const campaignData = campaign.toJSON();
+  for (let key in campaignData) {
+    if (campaignData[key] === undefined) {
+      campaignData[key] = null;
+    }
+  }
+  await database.ref('campaigns/' + campaign.id).set(campaignData);
+}
+
+app.post('/create-account', async (req, res) => {
+  try {
+    const pair = StellarSdk.Keypair.random();
+    const publicKey = pair.publicKey();
+    const secretKey = pair.secret();
+
+    // Fund the account using Friendbot
+    await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+
+    res.json({ publicKey, secretKey });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to create account', error: error.message });
+  }
 });
 
-app.get('/campaigns', (req, res) => {
-  res.json(campaigns);
+app.post('/campaigns', async (req, res) => {
+  const { creator, goal, deadline, creatorPublicKey } = req.body;
+  if (!goal || !deadline || !creatorPublicKey) {
+    return res.status(400).json({ message: 'Goal, deadline, and creator public key are required' });
+  }
+  const campaign = new CrowdfundingCampaign(creator, goal, new Date(deadline), creatorPublicKey);
+  try {
+    const transactionXDR = await campaign.createCampaign();
+    res.status(201).json({ 
+      message: 'Campaign creation prepared', 
+      campaignId: campaign.id,
+      transactionXDR 
+    });
+  } catch (error) {
+    console.error('Error creating campaign:', error);
+    res.status(500).json({ message: 'Failed to create campaign', error: error.message });
+  }
+});
+
+app.get('/campaigns', async (req, res) => {
+  const campaigns = await loadCampaigns();
+  res.json(Object.values(campaigns));
 });
 
 app.post('/campaigns/:id/contribute', async (req, res) => {
-    const { id } = req.params;
-    const { contributor, amount } = req.body;
-    try {
-      await campaigns[id].contribute(contributor, amount);
-      res.json({ message: 'Contribution successful' });
-    } catch (error) {
-      res.status(500).json({ message: 'Contribution failed', error: error.message });
+  const { id } = req.params;
+  const { contributorPublicKey, amount } = req.body;
+  try {
+    const campaigns = await loadCampaigns();
+    const campaign = campaigns[id];
+    if (campaign) {
+      const transactionXDR = await campaign.contribute(contributorPublicKey, amount);
+      res.json({ message: 'Contribution prepared', transactionXDR });
+    } else {
+      res.status(404).json({ message: 'Campaign not found' });
     }
+  } catch (error) {
+    res.status(500).json({ message: 'Contribution failed', error: error.message });
+  }
+});
+
+app.post('/campaigns/:id/finalize-contribution', async (req, res) => {
+  const { id } = req.params;
+  const { signedTransactionXDR, contributorPublicKey, amount } = req.body;
+  try {
+    const campaigns = await loadCampaigns();
+    const campaign = campaigns[id];
+    if (!campaign) {
+      return res.status(404).json({ message: 'Campaign not found' });
+    }
+
+    const transaction = StellarSdk.TransactionBuilder.fromXDR(
+      signedTransactionXDR,
+      StellarSdk.Networks.TESTNET
+    );
+    await server.submitTransaction(transaction);
+
+    campaign.contributions[contributorPublicKey] = (campaign.contributions[contributorPublicKey] || 0) + parseFloat(amount);
+    campaign.raised += parseFloat(amount);
+    await saveCampaign(campaign);
+
+    res.json({ message: 'Contribution finalized' });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to finalize contribution', error: error.message });
+  }
 });
 
 app.post('/campaigns/:id/finalize', async (req, res) => {
   const { id } = req.params;
-  await campaigns[id].finalizeCampaign();
-  res.json({ message: 'Campaign finalized' });
+  const { signedTransactionXDR } = req.body;
+  
+  try {
+    const campaigns = await loadCampaigns();
+    const campaign = campaigns[id];
+    if (!campaign) {
+      return res.status(404).json({ message: 'Campaign not found' });
+    }
+
+    const transaction = StellarSdk.TransactionBuilder.fromXDR(
+      signedTransactionXDR,
+      StellarSdk.Networks.TESTNET
+    );
+    const result = await server.submitTransaction(transaction);
+    campaign.stellarAddress = result.operation_results[0].created_account;
+    await saveCampaign(campaign);
+
+    res.json({ message: 'Campaign finalized', stellarAddress: campaign.stellarAddress });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to finalize campaign', error: error.message });
+  }
 });
 
 app.listen(port, () => {

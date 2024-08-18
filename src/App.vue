@@ -6,28 +6,32 @@
         StellarFund
       </template>
       <template #content>
-        <h2>Create New Campaign</h2>
-        <form @submit.prevent="createCampaign">
-          <div class="p-fluid">
-            <div class="p-field">
-              <label for="creator">Creator Address</label>
-              <InputText id="creator" v-model="newCampaign.creator" required />
+        <div v-if="!userAccount">
+          <h2>Create Stellar Account</h2>
+          <Button label="Create Account" @click="createAccount" />
+        </div>
+        <div v-else>
+          <p>Your Public Key: {{ userAccount.publicKey }}</p>
+          <p>Your Secret Key: {{ userAccount.secretKey }}</p>
+          <h2>Create New Campaign</h2>
+          <form @submit.prevent="createCampaign">
+            <div class="p-fluid">
+              <div class="p-field">
+                <label for="goal">Goal Amount (XLM)</label>
+                <InputNumber id="goal" v-model="newCampaign.goal" required />
+              </div>
+              <div class="p-field">
+                <label for="deadline">Deadline</label>
+                <Calendar id="deadline" v-model="newCampaign.deadline" dateFormat="yy-mm-dd" required />
+              </div>
+              <Button type="submit" label="Create Campaign" />
             </div>
-            <div class="p-field">
-              <label for="goal">Goal Amount (XLM)</label>
-              <InputNumber id="goal" v-model="newCampaign.goal" required />
-            </div>
-            <div class="p-field">
-              <label for="deadline">Deadline</label>
-              <Calendar id="deadline" v-model="newCampaign.deadline" dateFormat="yy-mm-dd" required />
-            </div>
-            <Button type="submit" label="Create Campaign" />
-          </div>
-        </form>
+          </form>
+        </div>
 
         <h2>Active Campaigns</h2>
         <DataTable :value="campaigns">
-          <Column field="title" header="Title"></Column>
+          <Column field="id" header="ID"></Column>
           <Column field="goal" header="Goal (XLM)"></Column>
           <Column field="raised" header="Raised (XLM)"></Column>
           <Column field="deadline" header="Deadline">
@@ -38,111 +42,181 @@
           <Column header="Contribute">
             <template #body="slotProps">
               <InputNumber v-model="slotProps.data.contributionAmount" placeholder="Amount" />
-              <Button label="Contribute" @click="contribute(slotProps.index, slotProps.data.contributionAmount)" />
-            </template>
-          </Column>
-          <Column header="Actions">
-            <template #body="slotProps">
-              <Button icon="pi pi-eye" @click="showCampaignDetails(slotProps.data)" />
-            </template>
-          </Column>
-          <Column header="Progress">
-            <template #body="slotProps">
-              <ProgressBar :value="(slotProps.data.raised / slotProps.data.goal) * 100" />
+              <Button label="Contribute" @click="contribute(slotProps.data.id, slotProps.data.contributionAmount)" />
             </template>
           </Column>
         </DataTable>
       </template>
     </Card>
-
-    <!-- Add this Dialog component -->
-    <Dialog v-model:visible="displayCampaignDetails" :header="selectedCampaign?.title" :modal="true">
-      <p>Goal: {{ selectedCampaign?.goal }} XLM</p>
-      <p>Raised: {{ selectedCampaign?.raised }} XLM</p>
-      <p>Deadline: {{ new Date(selectedCampaign?.deadline).toLocaleDateString() }}</p>
-      <ProgressBar :value="(selectedCampaign?.raised / selectedCampaign?.goal) * 100" />
-    </Dialog>
   </div>
 </template>
 
 <script>
 import axios from 'axios';
+import { useToast } from "primevue/usetoast";
 import Card from 'primevue/card';
-import InputText from 'primevue/inputtext';
 import InputNumber from 'primevue/inputnumber';
 import Calendar from 'primevue/calendar';
 import Button from 'primevue/button';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
 import Toast from 'primevue/toast';
-import { useToast } from "primevue/usetoast";
-import ProgressBar from 'primevue/progressbar';
+import { Keypair, Networks, Transaction } from 'stellar-sdk';
 
 export default {
   name: 'App',
   components: {
     Card,
-    InputText,
     InputNumber,
     Calendar,
     Button,
     DataTable,
     Column,
-    Toast,
-    ProgressBar,
-  },
-  data() {
-    return {
-      campaigns: [],
-      newCampaign: {
-        creator: '',
-        goal: null,
-        deadline: null
-      },
-      displayCampaignDetails: false,
-      selectedCampaign: null
-    }
-  },
-  created() {
-    this.fetchCampaigns();
+    Toast
   },
   setup() {
     const toast = useToast();
     return { toast }
   },
+  data() {
+    return {
+      campaigns: [],
+      newCampaign: {
+        goal: null,
+        deadline: null
+      },
+      pollingInterval: null,
+      userAccount: null
+    }
+  },
+  created() {
+    this.fetchCampaigns();
+    this.startPolling();
+    this.loadUserAccount();
+    this.validateUserAccount();
+  },
+  beforeUnmount() {
+    this.stopPolling();
+  },
   methods: {
+    async validateUserAccount() {
+      if (this.userAccount) {
+        console.log('Validating user account:', this.userAccount);
+        if (!this.userAccount.publicKey || !this.userAccount.secretKey) {
+          console.error('Invalid user account structure:', this.userAccount);
+          this.userAccount = null;
+          localStorage.removeItem('userAccount');
+          this.showError('Invalid user account. Please create a new account.');
+        }
+      }
+    },
+    async loadUserAccount() {
+      const storedAccount = localStorage.getItem('userAccount');
+      if (storedAccount) {
+        try {
+          this.userAccount = JSON.parse(storedAccount);
+          //console.log('User account loaded:', this.userAccount);
+        } catch (error) {
+          console.error('Error parsing stored user account:', error);
+          localStorage.removeItem('userAccount');
+        }
+      }
+    },
+    async createAccount() {
+      try {
+        const response = await axios.post('http://localhost:3000/create-account');
+        this.userAccount = response.data;
+        localStorage.setItem('userAccount', JSON.stringify(this.userAccount));
+        this.showSuccess('Stellar account created successfully');
+      } catch (error) {
+        console.error('Error creating Stellar account:', error);
+        this.showError('Failed to create Stellar account');
+      }
+    },
     async fetchCampaigns() {
       try {
         const response = await axios.get('http://localhost:3000/campaigns');
         this.campaigns = response.data;
       } catch (error) {
         console.error('Error fetching campaigns:', error);
+        this.showError('Failed to fetch campaigns');
       }
     },
     async createCampaign() {
       try {
-        await axios.post('http://localhost:3000/campaigns', this.newCampaign);
-        this.newCampaign = { creator: '', goal: null, deadline: null };
+        if (!this.userAccount) {
+          this.showError('Please create a Stellar account first');
+          return;
+        }
+        
+        const response = await axios.post('http://localhost:3000/campaigns', {
+          creator: this.userAccount.publicKey,
+          goal: this.newCampaign.goal,
+          deadline: this.newCampaign.deadline,
+          creatorPublicKey: this.userAccount.publicKey
+        });
+        
+        const { transactionXDR, campaignId } = response.data;
+        
+        // Sign the transaction
+        const sourceKeypair = Keypair.fromSecret(this.userAccount.secretKey);
+        const transaction = new Transaction(transactionXDR, Networks.TESTNET);
+        transaction.sign(sourceKeypair);
+        
+        // Finalize the campaign creation
+        await axios.post(`http://localhost:3000/campaigns/${campaignId}/finalize`, {
+          signedTransactionXDR: transaction.toXDR()
+        });
+        
+        this.newCampaign = { goal: null, deadline: null };
         await this.fetchCampaigns();
+        this.showSuccess('Campaign created successfully');
       } catch (error) {
         console.error('Error creating campaign:', error);
+        this.showError('Failed to create campaign: ' + error.message);
       }
     },
+
     async contribute(campaignId, amount) {
       try {
-        const contributorId = '1'; // Hardcoded for testing, should be dynamic in real app
-        await axios.post(`http://localhost:3000/campaigns/${campaignId}/contribute`, {
-          contributorId,
+        if (!this.userAccount) {
+          this.showError('Please create a Stellar account first');
+          return;
+        }
+
+        const response = await axios.post(`http://localhost:3000/campaigns/${campaignId}/contribute`, {
+          contributorPublicKey: this.userAccount.publicKey,
           amount
         });
+        
+        const { transactionXDR } = response.data;
+        
+        // Sign the transaction
+        const sourceKeypair = Keypair.fromSecret(this.userAccount.secretKey);
+        const transaction = new Transaction(transactionXDR, Networks.TESTNET);
+        transaction.sign(sourceKeypair);
+        
+        // Finalize the contribution
+        await axios.post(`http://localhost:3000/campaigns/${campaignId}/finalize-contribution`, {
+          signedTransactionXDR: transaction.toXDR(),
+          contributorPublicKey: this.userAccount.publicKey,
+          amount
+        });
+        
         await this.fetchCampaigns();
+        this.showSuccess('Contribution made successfully');
       } catch (error) {
         console.error('Error contributing to campaign:', error);
+        this.showError('Failed to make contribution: ' + error.message);
       }
     },
-    showCampaignDetails(campaign) {
-      this.selectedCampaign = campaign;
-      this.displayCampaignDetails = true;
+    startPolling() {
+      this.pollingInterval = setInterval(() => {
+        this.fetchCampaigns();
+      }, 30000); // Fetch every 30 seconds
+    },
+    stopPolling() {
+      clearInterval(this.pollingInterval);
     },
     showSuccess(message) {
       this.toast.add({severity:'success', summary: 'Success', detail: message, life: 3000});
