@@ -16,6 +16,9 @@ StellarFund is a decentralized crowdfunding platform built on the Stellar blockc
 
 ![image](https://github.com/user-attachments/assets/d27de957-ff29-43b4-81f0-211ea933b79a)
 
+![image](https://github.com/user-attachments/assets/9e43e1d6-76d7-496e-8489-878af400d382)
+
+
 
 ## Prerequisites
 
