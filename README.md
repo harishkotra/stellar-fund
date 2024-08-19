@@ -2,6 +2,8 @@
 
 StellarFund is a decentralized crowdfunding platform built on the Stellar blockchain. This project consists of a backend server and a Vue.js frontend application.
 
+You can view the demo here: https://www.loom.com/share/d5c2633dc4cd48a9aa75d9b76175dbae?sid=e780c6ea-4428-4816-b998-cca7c45ba5ba
+
 ## Screenshots
 
 ![image](https://github.com/user-attachments/assets/c254014a-5fa4-4e8e-a079-0edbcc9c0032)
