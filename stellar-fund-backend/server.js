@@ -14,16 +14,6 @@ const port = 3000;
 app.use(express.json());
 app.use(cors());
 
-// const firebaseConfig = {
-//   apiKey: `${process.env.FB_API_KEY}`,
-//   authDomain: `${process.env.FB_AUTH_DOMAIN}`,
-//   projectId: `${process.env.FB_PROJECT_ID}`,
-//   storageBucket: `${process.env.FB_STORAGE_BUCKET}`,
-//   messagingSenderId: `${process.env.FB_MESSAGE_SENDER_ID}`,
-//   appId: `${process.env.FB_APP_ID}`,
-//   measurementId: `${process.env.FB_MEASUREMENT_ID}`,
-// };
-
 // Initialize Firebase Admin
 const serviceAccount = require(`${process.env.FB_SERVICEACC_PATH}`);
 admin.initializeApp({
@@ -34,20 +24,16 @@ admin.initializeApp({
 const database = admin.database();
 
 const server = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
-// const testnetAccount = `${process.env.TEST_ACCOUNT}`;
-// const testnetSecretKey = `${process.env.TEST_ACCOUNT_SECRET}`;
-// const contributor1 = `${process.env.CONTRIBUTOR_1}`;
-// const contributor2 = `${process.env.CONTRIBUTOR_2}`;
 
 class CrowdfundingCampaign {
   constructor(creator, goal, deadline, creatorPublicKey) {
-    this.creator = creator || 'Anonymous'; // Default to 'Anonymous' if no creator is provided
+    this.creator = creator || 'Anonymous';
     this.goal = goal;
     this.deadline = deadline instanceof Date ? deadline : new Date(deadline);
     this.raised = 0;
     this.contributions = {};
     this.id = Date.now().toString();
-    this.stellarAddress = ''; // Will be set when createCampaign is called
+    this.stellarAddress = '';
     this.creatorPublicKey = creatorPublicKey;
     this.transactionXDR = null;
   }
@@ -76,6 +62,7 @@ class CrowdfundingCampaign {
   async createCampaign() {
     // Create a Stellar account for the campaign
     const campaignKeypair = StellarSdk.Keypair.random();
+    this.stellarAddress = campaignKeypair.publicKey(); 
     
     const transaction = new StellarSdk.TransactionBuilder(
       await server.loadAccount(this.creatorPublicKey),
@@ -115,6 +102,10 @@ class CrowdfundingCampaign {
   // }
 
   async contribute(contributorPublicKey, amount) {
+    if (!this.stellarAddress) {
+      throw new Error('Campaign stellar address not set. The campaign may not be finalized yet.');
+    }
+  
     const transaction = new StellarSdk.TransactionBuilder(
       await server.loadAccount(contributorPublicKey),
       { fee: StellarSdk.BASE_FEE, networkPassphrase: StellarSdk.Networks.TESTNET }
@@ -126,8 +117,7 @@ class CrowdfundingCampaign {
       }))
       .setTimeout(30)
       .build();
-
-    // Return the transaction XDR for the frontend to sign
+  
     return transaction.toXDR();
   }
   
@@ -181,31 +171,21 @@ class CrowdfundingCampaign {
   }
 }
 
-const campaigns = [];
-
 // Load campaigns from Firebase
 async function loadCampaigns() {
   try {
     const snapshot = await admin.database().ref('campaigns').once('value');
-    const campaigns = snapshot.val() || {};
+    const campaignsData = snapshot.val() || {};
     
-    // Convert deadline strings back to Date objects
-    Object.entries(campaigns).forEach(([id, campaign]) => {
-      if (campaign.deadline) {
-        campaign.deadline = new Date(campaign.deadline);
-      }
-
-      if (!campaign.contributions) {
-        campaign.contributions = {};
-      }
-
-      // Remove any undefined values
-      Object.keys(campaign).forEach(key => {
-        if (campaign[key] === undefined) {
-          delete campaign[key];
-        }
-      });
-
+    const campaigns = {};
+    Object.entries(campaignsData).forEach(([id, campaignData]) => {
+      campaigns[id] = new CrowdfundingCampaign(
+        campaignData.creator,
+        campaignData.goal,
+        new Date(campaignData.deadline),
+        campaignData.creatorPublicKey
+      );
+      Object.assign(campaigns[id], campaignData);
     });
     
     return campaigns;
@@ -218,13 +198,11 @@ async function loadCampaigns() {
 // Save campaign to Firebase
 async function saveCampaign(campaign) {
   try {
-    // Create a clean object without undefined values
     const cleanCampaign = Object.entries(campaign).reduce((acc, [key, value]) => {
       if (value !== undefined) {
         if (key === 'deadline' && value instanceof Date) {
           acc[key] = value.toISOString();
         } else if (key === 'contributions' && typeof value === 'object') {
-          // Handle contributions object
           acc[key] = Object.entries(value).reduce((contAcc, [contKey, contValue]) => {
             if (contValue !== undefined) {
               contAcc[contKey] = contValue;
@@ -295,13 +273,14 @@ app.post('/campaigns/:id/contribute', async (req, res) => {
   try {
     const campaigns = await loadCampaigns();
     const campaign = campaigns[id];
-    if (campaign) {
+    if (campaign && typeof campaign.contribute === 'function') {
       const transactionXDR = await campaign.contribute(contributorPublicKey, amount);
       res.json({ message: 'Contribution prepared', transactionXDR });
     } else {
-      res.status(404).json({ message: 'Campaign not found' });
+      res.status(404).json({ message: 'Campaign not found or invalid' });
     }
   } catch (error) {
+    console.error('Contribution error:', error);
     res.status(500).json({ message: 'Contribution failed', error: error.message });
   }
 });
@@ -360,12 +339,12 @@ app.post('/campaigns/:id/finalize', async (req, res) => {
     try {
       const transactionResult = await server.submitTransaction(transaction);
       
-      //console.log(JSON.stringify(transactionResult, null, 2));
-      //console.log('\nSuccess! View the transaction at: ');
-      //console.log(transactionResult._links.transaction.href);      
-      console.log('Campaign object before saving:', campaign);
-      console.log('Campaign object keys:', Object.keys(campaign));
-      
+      // Extract the stellarAddress from the transaction
+      const createAccountOp = transaction.operations.find(op => op.type === 'createAccount');
+      if (createAccountOp) {
+        campaign.stellarAddress = createAccountOp.destination;
+      }
+
       const saveResult = await saveCampaign(campaign);
       console.log(saveResult);
 
