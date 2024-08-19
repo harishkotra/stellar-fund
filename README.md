@@ -2,6 +2,21 @@
 
 StellarFund is a decentralized crowdfunding platform built on the Stellar blockchain. This project consists of a backend server and a Vue.js frontend application.
 
+## Screenshots
+
+![image](https://github.com/user-attachments/assets/c254014a-5fa4-4e8e-a079-0edbcc9c0032)
+
+![image](https://github.com/user-attachments/assets/8f902966-ede8-4b7a-a40d-923db8b5a397)
+
+![image](https://github.com/user-attachments/assets/7654b9c4-e72c-4ce7-bec2-cf7aaad373ab)
+
+![image](https://github.com/user-attachments/assets/bcdef257-288c-4ddf-a5b8-e58301249f52)
+
+![image](https://github.com/user-attachments/assets/b6b077fd-fcb4-4e88-85be-a6c184ed7255)
+
+![image](https://github.com/user-attachments/assets/d27de957-ff29-43b4-81f0-211ea933b79a)
+
+
 ## Prerequisites
 
 Before you begin, ensure you have met the following requirements:
@@ -64,9 +79,7 @@ To run StellarFund, follow these steps:
 
 To build the frontend for production:
 
-    ```
     npm run build
-    ```
 
 ## Contributing to StellarFund
 
