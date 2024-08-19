@@ -18,5 +18,5 @@ app.use(PrimeVue, {
         }
     }
 });
-app.use(ToastService)  // Ad
+app.use(ToastService)
 app.mount('#app')

@@ -3,6 +3,7 @@
     <Toast />
     <Card>
       <template #title>
+        <Image src="/banner.png" alt="Image" width="250" />
         <h1>Welcome to StellarFund</h1>
       </template>
       <template #content>
@@ -17,14 +18,32 @@
                 <div class="about-section">
                   <h2>Decentralized Crowdfunding on Stellar</h2>
                   <p>StellarFund is a platform that leverages the power of the Stellar blockchain to enable secure and transparent crowdfunding campaigns.</p>
-                  
-                  <h3>Key Features:</h3>
-                  <ul>
-                    <li>Create and manage crowdfunding campaigns using Stellar accounts</li>
-                    <li>Contribute to campaigns using Stellar Lumens (XLM)</li>
-                    <li>Real-time updates on campaign progress</li>
-                    <li>Secure transactions on the Stellar blockchain</li>
-                  </ul>
+
+                  <section id="features">
+                    <h2>Key Features</h2>
+                    <div class="feature-grid">
+                      <div class="feature-item">
+                        <i class="pi pi-pencil"></i>
+                        <h3>Create Campaigns</h3>
+                        <p>Launch and manage crowdfunding campaigns using Stellar accounts</p>
+                      </div>
+                      <div class="feature-item">
+                        <i class="pi pi-dollar"></i>
+                        <h3>Contribute Easily</h3>
+                        <p>Support campaigns using Stellar Lumens (XLM)</p>
+                      </div>
+                      <div class="feature-item">
+                        <i class="pi pi-chart-line"></i>
+                        <h3>Real-time Updates</h3>
+                        <p>Track campaign progress with live updates</p>
+                      </div>
+                      <div class="feature-item">
+                        <i class="pi pi-lock"></i>
+                        <h3>Secure Transactions</h3>
+                        <p>All transactions are securely recorded on the Stellar blockchain</p>
+                      </div>
+                    </div>
+                  </section>
                 </div>
               </TabPanel>
               <TabPanel value="1">
@@ -285,7 +304,9 @@ import Accordion from 'primevue/accordion';
 import AccordionPanel from 'primevue/accordionpanel';
 import AccordionHeader from 'primevue/accordionheader';
 import AccordionContent from 'primevue/accordioncontent';
+import Image from 'primevue/image';
 import { Keypair, Networks, Transaction } from 'stellar-sdk';
+
 
 export default {
   name: 'App',
@@ -311,6 +332,7 @@ export default {
     AccordionHeader,
     AccordionContent,
     Fieldset,
+    Image,
   },
   setup() {
     const toast = useToast();
@@ -334,12 +356,13 @@ export default {
     this.startPolling();
     this.loadUserAccount();
     this.validateUserAccount();
-    console.log(this.userAccount);
+    //console.log(this.userAccount);
   },
   beforeUnmount() {
     this.stopPolling();
   },
   computed: {
+    // Mask a user's secret key. It takes the user's secret key, extracts the first and last 4 characters, and replaces the middle characters with asterisks to mask the key. The masked key is then returned for display purposes.
     maskedSecretKey() {
       if (this.userAccount && this.userAccount.secretKey) {
         const key = this.userAccount.secretKey;
@@ -351,6 +374,7 @@ export default {
     }
   },
   methods: {
+    // Asynchronous HTTP GET request to the 'https://randomuser.me/api/' API to fetch a random user's data. It then extracts the user's name, image URL, and email from the response data and returns an object with these details. If there is an error during the API request, it catches the error, logs it to the console, and returns default values for the user's name, image URL, and email.
     async getRandomUser() {
       try {
         const response = await axios.get('https://randomuser.me/api/');
@@ -391,10 +415,11 @@ export default {
         }
       }
     },
+    // Creating a new testnet account using the `create-account` API
     async createAccount() {
       this.isCreatingAccount = true;
       try {
-        const stellarResponse = await axios.post('http://localhost:3000/create-account');
+        const stellarResponse = await axios.post(`${process.env.VUE_APP_API_URL}/create-account`);
         // Get random user data
         const randomUser = await this.getRandomUser();
 
@@ -413,7 +438,8 @@ export default {
     },
     async fetchCampaigns() {
       try {
-        const response = await axios.get('http://localhost:3000/campaigns');
+        //console.log(`${process.env.VUE_APP_API_URL}`);
+        const response = await axios.get(`${process.env.VUE_APP_API_URL}/campaigns`);
         this.campaigns = response.data;
       } catch (error) {
         console.error('Error fetching campaigns:', error);
@@ -428,13 +454,13 @@ export default {
           return;
         }
         
-        const response = await axios.post('http://localhost:3000/campaigns', {
+        const response = await axios.post(`${process.env.VUE_APP_API_URL}/campaigns`, {
           creator: this.userAccount.publicKey,
           goal: this.newCampaign.goal,
           deadline: this.newCampaign.deadline,
           creatorPublicKey: this.userAccount.publicKey
         });
-        console.log('respone', response.data);
+        //console.log('respone', response.data);
         const { transactionXDR, campaignId } = response.data;
         
         // Sign the transaction
@@ -443,7 +469,7 @@ export default {
         transaction.sign(sourceKeypair);
         
         // Finalize the campaign creation
-        await axios.post(`http://localhost:3000/campaigns/${campaignId}/finalize`, {
+        await axios.post(`${process.env.VUE_APP_API_URL}/campaigns/${campaignId}/finalize`, {
           signedTransactionXDR: transaction.toXDR()
         });
         
@@ -465,7 +491,7 @@ export default {
           return;
         }
 
-        const response = await axios.post(`http://localhost:3000/campaigns/${campaignId}/contribute`, {
+        const response = await axios.post(`${process.env.VUE_APP_API_URL}/campaigns/${campaignId}/contribute`, {
           contributorPublicKey: this.userAccount.publicKey,
           amount
         });
@@ -478,7 +504,7 @@ export default {
         transaction.sign(sourceKeypair);
         
         // Finalize the contribution
-        await axios.post(`http://localhost:3000/campaigns/${campaignId}/finalize-contribution`, {
+        await axios.post(`${process.env.VUE_APP_API_URL}/campaigns/${campaignId}/finalize-contribution`, {
           signedTransactionXDR: transaction.toXDR(),
           contributorPublicKey: this.userAccount.publicKey,
           amount
@@ -575,4 +601,24 @@ export default {
 .p-accordioncontent-content {
   text-align: left;
 }
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    padding: 2rem;
+  }
+  
+  .feature-item {
+    background-color: #43cb6cfb;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .feature-item i {
+    font-size: 2rem;
+    color: #3498db;
+    margin-bottom: 1rem;
+  }
 </style>
