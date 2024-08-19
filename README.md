@@ -98,6 +98,39 @@ To contribute to StellarFund, follow these steps:
 
 Alternatively, see the GitHub documentation on [creating a pull request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request).
 
+## Tech Stack
+
+StellarFund is built using a modern web development stack, leveraging the power of JavaScript both on the frontend and backend. Here's an overview of the technologies used:
+
+### Frontend
+- **Vue.js 3**: A progressive JavaScript framework for building user interfaces
+- **PrimeVue**: UI component library for Vue.js applications
+- **Axios**: Promise-based HTTP client for making API requests
+- **Vuex**: State management pattern + library for Vue.js applications
+- **Vue Router**: Official router for Vue.js
+
+### Backend
+- **Node.js**: JavaScript runtime built on Chrome's V8 JavaScript engine
+- **Express.js**: Web application framework for Node.js
+- **Stellar SDK**: Official Stellar library for interacting with the Stellar network
+
+### Blockchain
+- **Stellar Network**: Decentralized, open-source blockchain platform
+
+### Development Tools
+- **Vite**: Next generation frontend tooling for Vue.js
+- **ESLint**: Pluggable JavaScript linter
+- **Prettier**: Opinionated code formatter
+
+### APIs
+- **Random User API**: External API for generating random user profiles
+
+### Database
+- **Firebase Realtime Database**: Database for storing application data (campaign details, user information)
+
+### Version Control
+- **GitHub**: Hosting platform for version control and collaboration
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
